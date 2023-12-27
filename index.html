@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Track Upload and Playback</title>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        .track-container {
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container py-4">
+        <h1 class="mb-3">Demoing</h1>
+        <form id="upload-form" enctype="multipart/form-data" class="mb-4">
+            <div class="custom-file mb-3">
+                <input type="file" class="custom-file-input" name="file[]" multiple id="customFile">
+                <label class="custom-file-label" for="customFile">Choose Files</label>
+            </div>
+            <button type="submit" class="btn btn-primary">Upload</button>
+        </form>
+
+        <div id="uploaded-tracks"></div>
+
+        <div id="equalizer" class="mt-4">
+            <h2 class="mb-3">Equalizer</h2>
+            <div class="form-group">
+                <label for="low">Low Frequency:</label>
+                <input type="range" id="low" min="-40" max="40" value="0" class="custom-range">
+            </div>
+            <div class="form-group">
+                <label for="mid">Mid Frequency:</label>
+                <input type="range" id="mid" min="-40" max="40" value="0" class="custom-range">
+            </div>
+            <div class="form-group">
+                <label for="high">High Frequency:</label>
+                <input type="range" id="high" min="-40" max="40" value="0" class="custom-range">
+            </div>
+            <div class="form-group">
+                <h2 class="mb-3">Reverb:</h2>
+                <select id="reverb" class="custom-select">
+                    <option value="plate">Plate Reverb</option>
+                    <option value="hall">Hall Reverb</option>
+                    <option value="room">Room Reverb</option>
+                </select>
+            </div>
+            <button id="export-button" class="btn btn-success">Export Compressed Tracks</button>
+            <button id="export-uncompressed-button" class="btn btn-secondary">Export Uncompressed Tracks</button>
+
+        </div>
+        <div class="progress" style="height: 20px;">
+            <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+        </div>
+    </div>
+
+
+
+    <!-- jQuery and Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    document.getElementById('export-uncompressed-button').addEventListener('click', function() {
+    // 收集所需数据
+    var trackList = [];
+    $('#uploaded-tracks .track-container').each(function() {
+        var filename = $(this).find('source').attr('src').split('/').pop().split('?')[0];
+        trackList.push(filename);
+    });
+
+    var eqSettings = {
+        low: $('#low').val(),
+        mid: $('#mid').val(),
+        high: $('#high').val()
+    };
+
+    // 发送 AJAX 请求到专门的后端路由
+    $.ajax({
+        url: '/export-uncompressed',
+        type: 'POST',
+        data: JSON.stringify({tracks: trackList, eq: eqSettings}),
+        contentType: 'application/json; charset=utf-8',
+        success: function(response) {
+            alert('Tracks exported');
+            window.location.href = response.downloadUrl;
+        }
+    });
+});
+
+function editTrack(filename, track_id) {
+    var start = $('#start-' + filename.replace(/\./g, '\\.')).val();
+    var end = $('#end-' + filename.replace(/\./g, '\\.')).val();
+
+    $.ajax({
+        url: '/edit',
+        type: 'POST',
+        data: JSON.stringify({filename: filename, start: start, end: end}),
+        contentType: 'application/json; charset=utf-8',
+        dataType: 'json',
+        success: function(response) {
+            var editedTrackSrc = '/uploads/' + response.filename + '?t=' + new Date().getTime();
+            $('#' + track_id).find('source').attr('src', editedTrackSrc);
+            $('#' + track_id).find('audio')[0].load();
+        }
+    });
+}
+
+       $(document).ready(function(){
+        $('#upload-form').submit(function(e){
+            e.preventDefault();
+            var formData = new FormData(this);
+            $.ajax({
+                url: '/upload',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function(data){
+                    $.each(data, function(index, file_path){
+                        var filename = file_path.split('/').pop();
+                        console.log(file_path);
+                        var track_id = 'track-' + index;
+                        var track_src = '/uploads/' + filename + '?t=' + new Date().getTime();
+
+                        var track = $('<div>', {id: track_id, class: 'track-container'}).append(
+                            $('<audio controls>').append(
+                                $('<source>').attr('src', track_src).attr('type', 'audio/mpeg')
+                            )
+                        );
+                        var editControls = $('<div>', {class: 'edit-controls form-group'})
+                            .append($('<input>', {type: 'text', class: 'form-control mb-2', id: 'start-' + filename, placeholder: 'Start Time (sec)'}))
+                            .append($('<input>', {type: 'text', class: 'form-control mb-2', id: 'end-' + filename, placeholder: 'End Time (sec)'}))
+                            .append($('<button>', {class: 'btn btn-primary'}).text('Edit Track').click(function() { editTrack(filename, track_id); }));
+                        var trackContainer = $('<div>', {class: 'track-container'}).append(track).append(editControls);
+                        $('#uploaded-tracks').append(trackContainer);
+                        var audioElement = track.find('audio')[0];
+                        connectTrackToEQ(audioElement);
+                    });
+                }
+            });
+        });
+    });
+
+    var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    var lowShelf = audioCtx.createBiquadFilter();
+    lowShelf.type = "lowshelf";
+    lowShelf.frequency.value = 320;
+
+    var peaking = audioCtx.createBiquadFilter();
+    peaking.type = "peaking";
+    peaking.frequency.value = 1000;
+
+    var highShelf = audioCtx.createBiquadFilter();
+    highShelf.type = "highshelf";
+    highShelf.frequency.value = 3200;
+
+    lowShelf.connect(peaking);
+    peaking.connect(highShelf);
+    highShelf.connect(audioCtx.destination);
+
+    function adjustEQ() {
+        var lowGain = document.getElementById('low').value;
+        var midGain = document.getElementById('mid').value;
+        var highGain = document.getElementById('high').value;
+
+        lowShelf.gain.value = lowGain;
+        peaking.gain.value = midGain;
+        highShelf.gain.value = highGain;
+    }
+
+    document.getElementById('low').addEventListener('change', adjustEQ);
+    document.getElementById('mid').addEventListener('change', adjustEQ);
+    document.getElementById('high').addEventListener('change', adjustEQ);
+
+    // 当音轨加载时连接到均衡器
+    var trackSources = [];
+
+    function connectTrackToEQ(trackElement) {
+        var trackSource = audioCtx.createMediaElementSource(trackElement);
+        trackSource.connect(lowShelf);
+        trackSources.push(trackSource);
+    }
+
+    document.getElementById('export-button').addEventListener('click', function() {
+    var reverbType = $('#reverb').val();
+    var trackList = [];
+    $('#uploaded-tracks .track-container').each(function() {
+        var filename = $(this).find('source').attr('src').split('/').pop().split('?')[0];
+        trackList.push(filename);
+    });
+
+    var eqSettings = {
+        low: $('#low').val(),
+        mid: $('#mid').val(),
+        high: $('#high').val()
+    };
+
+    $.ajax({
+        url: '/export',
+        type: 'POST',
+        data: JSON.stringify({tracks: trackList, eq: eqSettings, reverb: reverbType}),
+        contentType: 'application/json; charset=utf-8',
+        success: function(response) {
+            alert('exported');
+            window.location.href = response.downloadUrl;
+        }
+    });
+    var progressInterval = setInterval(function() {
+        $.ajax({
+            url: '/progress',  // 获取进度的后端路由
+            type: 'GET',
+            success: function(response) {
+                var progress = response.progress;  // 假设返回的是一个包含进度的对象
+                updateProgressBar(progress);
+                if (progress >= 100) {
+                    clearInterval(progressInterval);  // 进度完成，停止轮询
+                }
+            }
+        });
+    }, 1000);  // 每秒检查一次进度
+});
+function updateProgressBar(progress) {
+    var progressBar = document.getElementById('progressBar');
+    progressBar.style.width = progress + '%';
+    progressBar.setAttribute('aria-valuenow', progress);
+    progressBar.innerText = progress + '%';
+}
+
+
+
+</script>
+
+</body>
+</html>

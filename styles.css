@@ -1,0 +1,43 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    padding: 20px;
+    color: #333;
+}
+h1 {
+    color: #333;
+}
+#upload-form {
+    margin-bottom: 20px;
+}
+#uploaded-tracks {
+    margin-top: 20px;
+}
+.track-container {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.edit-controls {
+    margin-top: 10px;
+}
+.edit-controls input {
+    margin-right: 5px;
+    padding: 5px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+}
+.edit-controls button {
+    padding: 5px 10px;
+    background-color: #5cb85c;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.edit-controls button:hover {
+    background-color: #4cae4c;
+}
